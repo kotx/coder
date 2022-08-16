@@ -6,12 +6,23 @@ terraform {
     fly = {
       source = "fly-apps/fly"
     }
+    random = {
+      source = "hashicorp/random"
+    }
   }
 }
 
 provider "fly" {
   fly_api_token = var.fly_token
   fly_http_endpoint = "_api.internal:4280"
+}
+
+variable "fly_app" {
+  description = <<EOF
+  Coder requires a Fly.io app name to provision workspaces.
+  EOF
+
+  sensitive = true
 }
 
 variable "fly_token" {
@@ -68,25 +79,41 @@ variable "docker_image" {
   }
 }
 
-resource "fly_app" "app" {
-  name = "coder-workspaces"
-  org = "yukata"
+variable "fly_region" {
+  description = "Which Fly.io region would you like to use for your workspace?"
+  default = "lax"
+  validation {
+    condition = contains(["ams", "cdg", "dfw", "ewr", "fra", "gru", "hkg", "iad", "lax", "lhr", "maa", "mad", "mia", "nrt", "ord", "phx", "scl", "sea", "sin", "sjc", "syd", "yul", "yyz"], var.fly_region)
+    error_message = "Invalid Fly.io region!"
+  }
 }
 
 resource "fly_volume" "homeVolume" {
   name = "${data.coder_workspace.me.owner}_${data.coder_workspace.me.name}_home"
-  app = "coder-workspaces"
+  app = var.fly_app
   size = 1
-  region = "lax"
-  depends_on = [fly_app.app]
+  region = var.fly_region
+}
+
+resource "coder_metadata" "volume" {
+  resource_id = fly_volume.homeVolume.id
+  item {
+    key = "name"
+    value = fly_volume.homeVolume.name
+  }
+}
+
+resource "random_id" "machineId" {
+  byte_length = 7
 }
 
 resource "fly_machine" "machine" {
   count = data.coder_workspace.me.start_count
-  app = "coder-workspaces"
-  region = "lax"
+
+  app = var.fly_app
+  region = var.fly_region
   image = var.docker_image
-  name = "${data.coder_workspace.me.owner}-${lower(data.coder_workspace.me.name)}"
+  name = "${data.coder_workspace.me.owner}-${data.coder_workspace.me.name}-${random_id.machineId.hex}"
   # env = {
   #   CODER_AGENT_TOKEN = coder_agent.main.token
   # }
@@ -108,6 +135,14 @@ resource "fly_machine" "machine" {
       volume = fly_volume.homeVolume.id
     }
   ]
-  depends_on = [fly_app.app, fly_volume.homeVolume]
+  depends_on = [fly_volume.homeVolume]
 }
 
+resource "coder_metadata" "machine" {
+  count = data.coder_workspace.me.start_count
+  resource_id = fly_machine.machine[0].id
+  item {
+    key = "name"
+    value = fly_machine.machine[0].name
+  }
+}
