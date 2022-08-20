@@ -33,17 +33,6 @@ variable "step2_arch" {
   }
   sensitive = true
 }
-variable "step3_OS" {
-  description = <<-EOF
-  What operating system is your Coder host on?
-  EOF
-
-  validation {
-    condition     = contains(["MacOS", "Windows", "Linux"], var.step3_OS)
-    error_message = "Value must be MacOS, Windows, or Linux."
-  }
-  sensitive = true
-}
 
 provider "docker" {
   host = var.step1_host
