@@ -1,7 +1,5 @@
 ---
-name: Bare (custom template)
-description: Use this template as a starting point for writing custom templates with Terraform
-tags: [bare]
+name: Fly.io
+description: Run Fly Machines on Fly.io using registry images
+tags: [fly, docker]
 ---
-
-See <https://coder.com/docs/coder-oss/latest/templates#creating--troubleshooting-templates>
