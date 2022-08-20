@@ -83,7 +83,6 @@ variable "docker_image" {
     "codercom/enterprise-intellij:ubuntu", "codercom/enterprise-golang:ubuntu"], var.docker_image)
     error_message = "Invalid Docker image!"
   }
-
 }
 
 resource "docker_volume" "home_volume" {
