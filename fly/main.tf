@@ -113,7 +113,7 @@ resource "fly_machine" "machine" {
   app = var.fly_app
   region = var.fly_region
   image = var.docker_image
-  name = "${data.coder_workspace.me.owner}_${data.coder_workspace.me.name}_${random_id.machineId.hex}"
+  name = "${data.coder_workspace.me.owner}-${data.coder_workspace.me.name}-${random_id.machineId.hex}"
   # env = {
   #   CODER_AGENT_TOKEN = coder_agent.main.token
   # }
