@@ -12,6 +12,9 @@ terraform {
   }
 }
 
+data "coder_provisioner" "me" {
+}
+
 provider "fly" {
   fly_api_token = var.fly_token
   fly_http_endpoint = "_api.internal:4280"
@@ -40,8 +43,8 @@ data "coder_workspace" "me" {
 }
 
 resource "coder_agent" "main" {
+  arch = data.coder_provisioner.me.arch
   os   = "linux"
-  arch = "amd64"
   startup_script = <<EOF
     #!/bin/sh
     # install and start code-server
@@ -88,7 +91,7 @@ variable "fly_region" {
   }
 }
 
-resource "fly_volume" "homeVolume" {
+resource "fly_volume" "home_volume" {
   name = "${data.coder_workspace.me.owner}_${data.coder_workspace.me.name}_home"
   app = var.fly_app
   size = 1
@@ -96,14 +99,14 @@ resource "fly_volume" "homeVolume" {
 }
 
 resource "coder_metadata" "volume" {
-  resource_id = fly_volume.homeVolume.id
+  resource_id = fly_volume.home_volume.id
   item {
     key = "name"
-    value = fly_volume.homeVolume.name
+    value = fly_volume.home_volume.name
   }
 }
 
-resource "random_id" "machineId" {
+resource "random_id" "machine_id" {
   byte_length = 7
 }
 
@@ -111,31 +114,28 @@ resource "fly_machine" "machine" {
   count = data.coder_workspace.me.start_count
 
   app = var.fly_app
+
+  cpus = 8
+  cputype = "shared"
+  memorymb = 8192
+
   region = var.fly_region
   image = var.docker_image
-  name = "${data.coder_workspace.me.owner}_${data.coder_workspace.me.name}_${random_id.machineId.hex}"
-  # env = {
-  #   CODER_AGENT_TOKEN = coder_agent.main.token
-  # }
-  services = [
-    {
-      ports = [
-        {
-          port = 8080
-          handlers = ["http"]
-        }
-      ]
-      "protocol": "tcp",
-      "internal_port": 8080
-    }
-  ]
+  name = "${data.coder_workspace.me.owner}_${data.coder_workspace.me.name}_${random_id.machine_id.hex}"
+  env = {
+    CODER_AGENT_TOKEN = coder_agent.main.token
+  }
+
+  cmd = [
+    "sh", "-c", coder_agent.main.init_script]
+
   mounts = [
     {
       path = "/home"
-      volume = fly_volume.homeVolume.id
+      volume = fly_volume.home_volume.id
     }
   ]
-  depends_on = [fly_volume.homeVolume]
+  depends_on = [fly_volume.home_volume]
 }
 
 resource "coder_metadata" "machine" {
