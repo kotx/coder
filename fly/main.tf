@@ -47,6 +47,11 @@ resource "coder_agent" "main" {
   os   = "linux"
   startup_script = <<EOF
     #!/bin/sh
+    sudo hostname ${data.coder_workspace.me.name}
+    echo "127.0.0.1 ${data.coder_workspace.me.name}" | sudo tee -a /etc/hosts
+
+    ${var.dotfiles_uri != "" ? "coder dotfiles -y ${var.dotfiles_uri}" : ""}
+
     # install and start code-server
     curl -fsSL https://code-server.dev/install.sh | sh
     code-server --auth none --port 13337
@@ -67,7 +72,7 @@ resource "coder_agent" "main" {
 resource "coder_app" "code-server" {
   agent_id = coder_agent.main.id
   name     = "code-server"
-  url      = "http://localhost:13337/?folder=/home/coder"
+  url      = "http://localhost:13337/?folder=/workspace"
   icon     = "/icon/code.svg"
 }
 
@@ -75,11 +80,24 @@ variable "docker_image" {
   description = "Which Docker image would you like to use for your workspace?"
   # The codercom/enterprise-* images are only built for amd64
   default = "codercom/enterprise-base:ubuntu"
+}
+
+variable "workspace_size" {
+  description = "What should the size of your workspace be? (in GB)"
+  default = 1
   validation {
-    condition = contains(["codercom/enterprise-base:ubuntu", "codercom/enterprise-node:ubuntu",
-    "codercom/enterprise-intellij:ubuntu", "codercom/enterprise-golang:ubuntu"], var.docker_image)
-    error_message = "Invalid Docker image!"
+    condition = var.workspace_size >= 1 && var.workspace_size <= 10
+    error_message = "Invalid volume size! Allowed: 1-10"
   }
+}
+
+variable "dotfiles_uri" {
+  description = <<-EOF
+  Dotfiles repo URI (optional)
+
+  see https://dotfiles.github.io
+  EOF
+  default = ""
 }
 
 variable "fly_region" {
@@ -91,18 +109,19 @@ variable "fly_region" {
   }
 }
 
-resource "fly_volume" "home_volume" {
+
+resource "fly_volume" "workspace_volume" {
   name = "${data.coder_workspace.me.owner}_${data.coder_workspace.me.name}_home"
   app = var.fly_app
-  size = 1
+  size = var.workspace_size
   region = var.fly_region
 }
 
 resource "coder_metadata" "volume" {
-  resource_id = fly_volume.home_volume.id
+  resource_id = fly_volume.workspace_volume.id
   item {
     key = "name"
-    value = fly_volume.home_volume.name
+    value = fly_volume.workspace_volume.name
   }
 }
 
@@ -115,14 +134,14 @@ resource "fly_machine" "machine" {
 
   app = var.fly_app
 
-  cpus = 8
-  cputype = "shared"
-  memorymb = 8192
+  cpus = 4
+  memorymb = 6144
 
   region = var.fly_region
   image = var.docker_image
   name = "${data.coder_workspace.me.owner}_${data.coder_workspace.me.name}_${random_id.machine_id.hex}"
   env = {
+    HOME = "/workspace"
     CODER_AGENT_TOKEN = coder_agent.main.token
   }
 
@@ -131,11 +150,11 @@ resource "fly_machine" "machine" {
 
   mounts = [
     {
-      path = "/home"
-      volume = fly_volume.home_volume.id
+      path = "/workspace"
+      volume = fly_volume.workspace_volume.id
     }
   ]
-  depends_on = [fly_volume.home_volume]
+  depends_on = [fly_volume.workspace_volume]
 }
 
 resource "coder_metadata" "machine" {
